@@ -43,9 +43,9 @@ public final class HiveSchemaUtil
             case DATE -> "date";
             case TIME, STRING, UUID -> "string";
             case TIMESTAMP, TIMESTAMP_NANO -> "timestamp";
-            case FIXED, BINARY -> "binary";
+            case FIXED, BINARY, GEOMETRY, GEOGRAPHY -> "binary";
             case DECIMAL -> "decimal(%s,%s)".formatted(((DecimalType) type).precision(), ((DecimalType) type).scale());
-            case UNKNOWN, GEOMETRY, GEOGRAPHY -> throw new TrinoException(NOT_SUPPORTED, "Unsupported Iceberg type: " + type);
+            case UNKNOWN -> throw new TrinoException(NOT_SUPPORTED, "Unsupported Iceberg type: " + type);
             // TODO https://github.com/trinodb/trino/issues/24538 Support variant type
             case VARIANT -> throw new TrinoException(NOT_SUPPORTED, "Unsupported Iceberg type: VARIANT");
             case LIST -> "array<%s>".formatted(convert(type.asListType().elementType()));
