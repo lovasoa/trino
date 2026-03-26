@@ -35,6 +35,7 @@ import static io.trino.spi.StandardErrorCode.NUMERIC_VALUE_OUT_OF_RANGE;
 import static io.trino.testing.TestingHandles.TEST_CATALOG_NAME;
 import static io.trino.testing.TestingSession.testSessionBuilder;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS;
 import static org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT;
 
@@ -749,6 +750,48 @@ public class TestPythonFunctions
                 .hasErrorCode(FUNCTION_IMPLEMENTATION_ERROR)
                 .hasMessage("Failed to convert Python result type 'str' to Trino type BIGINT: " +
                         "TypeError: 'str' object cannot be interpreted as an integer");
+    }
+
+    @Test
+    public void testTypeNumber()
+    {
+        String query =
+                """
+                WITH FUNCTION multiply(x number, y number)
+                RETURNS number
+                LANGUAGE PYTHON
+                WITH (handler = 'multiply')
+                AS $$
+                from decimal import Decimal
+                def multiply(x, y):
+                    return x * y * Decimal("100000000000000000000.000000000000000000000000000000000000001")
+                $$
+                """;
+
+        assertThat(assertions.query(
+                query + "SELECT multiply(NUMBER '1.12345', NUMBER '2.54321')"))
+                .matches("VALUES NUMBER '2.8571692745E+20'");
+
+        // TODO: https://github.com/trinodb/trino-wasm-python/pull/11
+        assertThatThrownBy(() -> assertThat(assertions.query(
+                query + "SELECT multiply(NUMBER 'NaN', NUMBER '2.54321')"))
+                .matches("VALUES NUMBER 'NaN'"))
+                .hasMessageContaining("ValueError: Decimal is not finite: NaN");
+
+        assertThatThrownBy(() -> assertThat(assertions.query(
+                query + "SELECT multiply(NUMBER '-Infinity', NUMBER '2.54321')"))
+                .matches("VALUES NUMBER 'NaN'"))
+                .hasMessageContaining("ValueError: Decimal is not finite: -Infinity");
+
+        assertThatThrownBy(() -> assertThat(assertions.query(
+                query + "SELECT multiply(NUMBER '+Infinity', NUMBER '2.54321')"))
+                .matches("VALUES NUMBER 'NaN'"))
+                .hasMessageContaining("ValueError: Decimal is not finite: Infinity");
+
+        assertThatThrownBy(() -> assertThat(assertions.query(
+                query + "SELECT multiply(NULL, NUMBER '2.54321')"))
+                .matches("VALUES NUMBER 'NaN'"))
+                .hasMessageContaining("TypeError: unsupported operand type(s) for *: 'NoneType' and 'decimal.Decimal'");
     }
 
     @Test
